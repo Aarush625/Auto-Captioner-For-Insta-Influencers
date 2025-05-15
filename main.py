@@ -1,99 +1,89 @@
+import cv2
 import whisper
-from moviepy import VideoFileClip
 import os
+from moviepy import VideoFileClip
+import numpy as np
 
-# --- Your function to read file in batches ---
-def read_file_in_batches(file_path, batch_size=4):
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file: # Added encoding for wider compatibility
-            # Read the entire content of the file
-            text = file.read()
-            
-            # Split the content into words
-            words = text.split()
-            
-            if not words:
-                print(f"The file '{file_path}' is empty or contains only whitespace.")
-                return
-
-            print(f"\n--- Reading '{file_path}' in batches of {batch_size} words ---")
-            # Loop over words in batches of 'batch_size'
-            for i in range(0, len(words), batch_size):
-                # Slice the list to get a batch of words
-                batch = words[i:i + batch_size]
-                print(' '.join(batch))  # Print the batch of words as a line
-            print("--- End of batched reading ---")
-
-    except FileNotFoundError:
-        print(f"Error: The file '{file_path}' was not found for batched reading.")
-    except Exception as e:
-        print(f"An error occurred while reading file in batches: {e}")
-
-# --- Main transcription function (from previous example) ---
+# --- Step 1: Transcribe Video using Whisper ---
 def transcribe_video(video_path, model_name="base"):
-
-    audio_path = "temp_audio.wav"  # Define audio_path here to ensure it's in scope for finally
+    audio_path = "temp_audio.wav"
     try:
-        # 1. Extract Audio from Video
-        print(f"Extracting audio from {video_path}...")
+        print("Extracting audio...")
         video_clip = VideoFileClip(video_path)
         video_clip.audio.write_audiofile(audio_path)
         video_clip.close()
-        print(f"Audio extracted successfully to {audio_path}")
 
-        # 2. Transcribe Audio using Whisper
-        print(f"Loading Whisper model: {model_name}...")
+        print("Transcribing...")
         model = whisper.load_model(model_name)
-        print("Model loaded. Starting transcription...")
-
         result = model.transcribe(audio_path)
-        transcribed_text = result["text"]
-        print("Transcription complete.")
+        return result["text"]
 
-        return transcribed_text
-
-    except Exception as e:
-        print(f"An error occurred during transcription: {e}")
-        return None
     finally:
-        # Clean up the temporary audio file
         if os.path.exists(audio_path):
-            try:
-                os.remove(audio_path)
-                print(f"Temporary audio file {audio_path} deleted.")
-            except Exception as e:
-                print(f"Error deleting temporary audio file {audio_path}: {e}")
+            os.remove(audio_path)
 
+# --- Step 2: Convert text into batches of N words ---
+def get_word_batches(text, batch_size=5):
+    words = text.strip().split()
+    return [' '.join(words[i:i + batch_size]) for i in range(0, len(words), batch_size)]
 
-if __name__ == "__main__":
-    # --- Configuration ---
-    video_file_path = "test_video.mp4"  # <--- CHANGE THIS TO YOUR VIDEO FILE PATH
-    selected_model = "base"
-    batch_read_size = 5 # You can change the batch size for reading the transcription
-    # --- End Configuration ---
+# --- Step 3: Overlay text onto video and save ---
+def overlay_text_on_video(video_path, output_path, word_batches, batch_duration=1):
+    cap = cv2.VideoCapture(video_path)
+    fps = int(cap.get(cv2.CAP_PROP_FPS))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    if not os.path.exists(video_file_path):
-        print(f"Error: Video file not found at {video_file_path}")
-        print("Please update the 'video_file_path' variable in the script.")
-    else:
-        transcription = transcribe_video(video_file_path, selected_model)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
-        if transcription:
-            print("\n--- Full Transcription ---")
-            print(transcription)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 1
+    font_color = (0, 255, 0)
+    thickness = 2
+    line_type = cv2.LINE_AA
 
-            # Define the output text file name based on the video file name
-            output_txt_file = os.path.splitext(video_file_path)[0] + "_transcription.txt"
-            
-            try:
-                with open(output_txt_file, "w", encoding="utf-8") as f:
-                    f.write(transcription)
-                print(f"\nTranscription saved to: {output_txt_file}")
+    current_batch_index = 0
+    frames_per_batch = int(fps * batch_duration)
 
-                # Now, read the saved transcription file in batches
-                read_file_in_batches(output_txt_file, batch_size=batch_read_size)
+    for frame_idx in range(total_frames):
+        ret, frame = cap.read()
+        if not ret:
+            break
 
-            except Exception as e:
-                print(f"Error saving transcription or reading in batches: {e}")
+        # Change text every `frames_per_batch` frames
+        if frame_idx // frames_per_batch < len(word_batches):
+            current_batch_index = frame_idx // frames_per_batch
         else:
-            print("Transcription failed. Cannot proceed to read in batches.")
+            current_batch_index = len(word_batches) - 1
+
+        text = word_batches[current_batch_index]
+
+        text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
+        text_x = (frame.shape[1] - text_size[0]) // 2
+        text_y = (frame.shape[0] + text_size[1]) // 2
+
+        cv2.putText(frame, text, (text_x, text_y), font, font_scale, font_color, thickness, line_type)
+        out.write(frame)
+
+    cap.release()
+    out.release()
+    print(f"Video saved to {output_path}")
+
+# --- Step 4: Run Everything ---
+if __name__ == "__main__":
+    video_file = "test_video.mp4"  # <--- Your video here
+    output_file = "output_video.mp4"
+    batch_size = 4  # Number of words per batch
+    batch_display_time = 1  # In seconds
+
+    if not os.path.exists(video_file):
+        print(f"Video file not found: {video_file}")
+    else:
+        # Transcribe and split text
+        full_text = transcribe_video(video_file)
+        word_batches = get_word_batches(full_text, batch_size=batch_size)
+
+        # Overlay onto video
+        overlay_text_on_video(video_file, output_file, word_batches, batch_duration=batch_display_time)

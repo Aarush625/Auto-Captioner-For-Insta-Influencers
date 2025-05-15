@@ -1,52 +1,53 @@
 import cv2
+import whisper
 
-# Load the video
-video_path = 'test_video.mp4'
-cap = cv2.VideoCapture(video_path)
+# Load whisper model and transcribe with segments
+model = whisper.load_model("base")
+result = model.transcribe("temp_audio.wav")
+segments = result["segments"]
 
-# Get the video frame properties
-fps = int(cap.get(cv2.CAP_PROP_FPS))
+cap = cv2.VideoCapture("test_video.mp4")
+fps = cap.get(cv2.CAP_PROP_FPS)
 width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-# Define the codec and create VideoWriter object to save the output
-output_path = 'output_video.mp4'
-fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4
-out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+out = cv2.VideoWriter("output_cv2.mp4", fourcc, fps, (width, height))
 
-# Define the font and text properties
-font = cv2.FONT_HERSHEY_SIMPLEX
-text = "Hello, OpenCV!"
-font_scale = 1
-font_color = (0, 255, 0)  # Green color in BGR
-thickness = 2
-line_type = cv2.LINE_AA
+frame_idx = 0
 
 while True:
-    # Read each frame from the video
     ret, frame = cap.read()
-    
     if not ret:
-        break  # End of video
-    
-    # Get the text size to center it
-    text_size = cv2.getTextSize(text, font, font_scale, thickness)[0]
-    text_x = (frame.shape[1] - text_size[0]) // 2
-    text_y = (frame.shape[0] + text_size[1]) // 2
-
-    # Put the text on the frame
-    cv2.putText(frame, text, (text_x, text_y), font, font_scale, font_color, thickness, line_type)
-
-    # Write the frame to the output video
-    out.write(frame)
-
-    # Display the frame with the text
-    cv2.imshow('Frame', frame)
-    
-    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Release everything when done
+    current_time = frame_idx / fps
+
+    # Find segment text for this time
+    current_text = ""
+    for seg in segments:
+        if seg['start'] <= current_time <= seg['end']:
+            current_text = seg['text']
+            break
+
+    if current_text:
+        # Draw text on frame (bottom center)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 1
+        thickness = 2
+        text_size = cv2.getTextSize(current_text, font, font_scale, thickness)[0]
+        text_x = (width - text_size[0]) // 2
+        text_y = height - 30
+
+        # Add a black rectangle background for readability
+        cv2.rectangle(frame, (text_x-5, text_y - text_size[1] - 5), 
+                      (text_x + text_size[0] + 5, text_y + 5), (0,0,0), -1)
+
+        # Put white text on top
+        cv2.putText(frame, current_text, (text_x, text_y), font, font_scale, (255,255,255), thickness)
+
+    out.write(frame)
+    frame_idx += 1
+
 cap.release()
 out.release()
-cv2.destroyAllWindows()
