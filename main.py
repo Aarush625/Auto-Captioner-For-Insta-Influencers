@@ -128,6 +128,9 @@ def add_audio_to_video(original_video_path, silent_video_path, final_output_path
     final_clip = silent_clip.with_audio(original_clip.audio)
     final_clip.write_videofile(final_output_path, codec='libx264', audio_codec='aac')
     print(f"Final video with audio saved to {final_output_path}")
+    original_clip.close()
+    silent_clip.close()
+    final_clip.close()
 
 # --- Step 5: Run Everything ---
 if __name__ == "__main__":
