@@ -4,6 +4,9 @@ import os
 from moviepy import VideoFileClip
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
+import shutil
+
+
 # --- Step 1: Transcribe Video using Whisper ---
 def transcribe_video_with_timestamps(video_path, model_name="base"):
     audio_path = "temp_audio.wav"
@@ -133,25 +136,25 @@ def add_audio_to_video(original_video_path, silent_video_path, final_output_path
     final_clip.close()
 
 # --- Step 5: Run Everything ---
-if __name__ == "__main__":
-    video_file = "test_video.mp4"
-    silent_video_file = "silent_output.mp4"
-    final_output_file = "output_video_with_audio.mp4"
-    batch_size = 2
+# if __name__ == "__main__":
+#     video_file = "test_video.mp4"
+#     silent_video_file = "silent_output.mp4"
+#     final_output_file = "output_video_with_audio.mp4"
+#     batch_size = 2
 
-    if not os.path.exists(video_file):
-        print(f"Video file not found: {video_file}")
-    else:
-        # Step 1: Transcribe with timestamps
-        words = transcribe_video_with_timestamps(video_file)
+#     if not os.path.exists(video_file):
+#         print(f"Video file not found: {video_file}")
+#     else:
+#         # Step 1: Transcribe with timestamps
+#         words = transcribe_video_with_timestamps(video_file)
         
-        # Step 2: Group words into timed batches
-        batches = group_words_into_batches(words, batch_size=batch_size)
+#         # Step 2: Group words into timed batches
+#         batches = group_words_into_batches(words, batch_size=batch_size)
         
-        # Step 3: Overlay precise text on video
-        overlay_precise_text_on_video(video_file, silent_video_file, batches, font_path='')
+#         # Step 3: Overlay precise text on video
+#         overlay_precise_text_on_video(video_file, silent_video_file, batches, font_path='')
         
-        # Step 4: Add original audio back
-        add_audio_to_video(video_file, silent_video_file, final_output_file)
+#         # Step 4: Add original audio back
+#         add_audio_to_video(video_file, silent_video_file, final_output_file)
 
 

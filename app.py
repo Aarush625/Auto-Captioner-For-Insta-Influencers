@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, send_file, redirect, url_for, after_this_request
 from werkzeug.utils import secure_filename
+import shutil
 
 # Import your captioning functions here
 from main import (
@@ -43,13 +44,18 @@ def upload_file():
         input_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(input_path)
 
+        # 🔹 Get batch size from form input
+        batch_size = request.form.get('batch_size', type=int)
+        if not batch_size or batch_size < 1:
+            return "Invalid batch size", 400
+
         # Paths for intermediate and output files
         silent_path = os.path.join(app.config['OUTPUT_FOLDER'], f"silent_{filename}")
         final_path = os.path.join(app.config['OUTPUT_FOLDER'], f"captioned_{filename}")
 
         # Run your pipeline
         words = transcribe_video_with_timestamps(input_path)
-        batches = group_words_into_batches(words, batch_size=2)
+        batches = group_words_into_batches(words, batch_size=batch_size)
         overlay_precise_text_on_video(input_path, silent_path, batches)
         add_audio_to_video(input_path, silent_path, final_path)
 
@@ -69,11 +75,8 @@ def download_file(filename):
         @after_this_request
         def remove_files(response):
             try:
-                os.remove(final_path)
-                if os.path.exists(original_path):
-                    os.remove(original_path)
-                if os.path.exists(silent_path):
-                    os.remove(silent_path)
+                shutil.rmtree("./uploads")
+                shutil.rmtree("./outputs")
                 print("✅ Deleted all related files.")
             except Exception as e:
                 print(f"❌ Error deleting files: {e}")
